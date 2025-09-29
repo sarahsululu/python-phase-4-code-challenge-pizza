@@ -1,36 +1,44 @@
 #!/usr/bin/env python3
-from models import db, Restaurant, RestaurantPizza, Pizza
-from flask_migrate import Migrate
-from flask import Flask, request, jsonify
-from flask_restful import Api, Resource
 import os
+from flask import Flask, request
+from flask_restful import Api, Resource
+from flask_migrate import Migrate
+from server.models import db, Restaurant, RestaurantPizza, Pizza
 
+
+# Database setup
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-DATABASE = os.environ.get("DB_URI", f"sqlite:///{os.path.join(BASE_DIR, 'app.db')}")
+DATABASE = os.environ.get(
+    "DB_URI",
+    f"sqlite:///{os.path.join(BASE_DIR, 'app.db')}"
+)
 
 app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.json.compact = False
 
-migrate = Migrate(app, db)
+# Initialize extensions
 db.init_app(app)
+migrate = Migrate(app, db)
 api = Api(app)
+
 
 @app.route("/")
 def index():
-    return "<h1>Code challenge</h1>"
+    return "<h1>Code Challenge</h1>"
 
+
+# -------------------- RESTAURANTS --------------------
 class Restaurants(Resource):
     def get(self):
         restaurants = Restaurant.query.all()
-        response = [r.to_dict(only=("id", "name", "address")) for r in restaurants]
-        return response, 200
+        return [r.to_dict(only=("id", "name", "address")) for r in restaurants], 200
+
 
 class RestaurantById(Resource):
     def get(self, id):
         restaurant = db.session.get(Restaurant, id)
-
         if not restaurant:
             return {"error": "Restaurant not found"}, 404
 
@@ -41,8 +49,6 @@ class RestaurantById(Resource):
             "restaurant_pizzas": [
                 {
                     "id": rp.id,
-                    "pizza_id": rp.pizza_id,
-                    "restaurant_id": rp.restaurant_id,
                     "price": rp.price,
                     "pizza": {
                         "id": rp.pizza.id,
@@ -53,28 +59,26 @@ class RestaurantById(Resource):
                 for rp in restaurant.restaurant_pizzas
             ]
         }
-
         return response, 200
 
     def delete(self, id):
         restaurant = db.session.get(Restaurant, id)
-
         if not restaurant:
             return {"error": "Restaurant not found"}, 404
 
-        RestaurantPizza.query.filter_by(restaurant_id=id).delete()
-
         db.session.delete(restaurant)
         db.session.commit()
-
         return "", 204
 
+
+# -------------------- PIZZAS --------------------
 class Pizzas(Resource):
     def get(self):
         pizzas = Pizza.query.all()
-        response = [{"id": p.id, "name": p.name, "ingredients": p.ingredients} for p in pizzas]
-        return response, 200
+        return [{"id": p.id, "name": p.name, "ingredients": p.ingredients} for p in pizzas], 200
 
+
+# -------------------- RESTAURANT PIZZAS --------------------
 class RestaurantPizzas(Resource):
     def post(self):
         data = request.get_json() or {}
@@ -83,7 +87,6 @@ class RestaurantPizzas(Resource):
         restaurant_id = data.get("restaurant_id")
 
         errors = []
-
         if price is None or not isinstance(price, (int, float)) or not (1 <= price <= 30):
             errors.append("validation errors")
 
@@ -104,8 +107,6 @@ class RestaurantPizzas(Resource):
 
         response = {
             "id": new_rp.id,
-            "pizza_id": new_rp.pizza_id,
-            "restaurant_id": new_rp.restaurant_id,
             "price": new_rp.price,
             "pizza": {
                 "id": pizza.id,
@@ -118,13 +119,15 @@ class RestaurantPizzas(Resource):
                 "address": restaurant.address
             }
         }
-
         return response, 201
 
+
+# Register resources
 api.add_resource(Restaurants, "/restaurants")
 api.add_resource(RestaurantById, "/restaurants/<int:id>")
 api.add_resource(Pizzas, "/pizzas")
 api.add_resource(RestaurantPizzas, "/restaurant_pizzas")
+
 
 if __name__ == "__main__":
     app.run(port=5555, debug=True)
